@@ -21,6 +21,14 @@ class Kokx_Irc_Client
 {
 
     /**
+     * Message types
+     */
+    const TYPE_PRIVMSG = 'privmsg';
+    const TYPE_NOTICE  = 'notice';
+    const TYPE_CTCP    = 'ctcp';
+
+
+    /**
      * Config array
      *
      * @var array
@@ -118,6 +126,31 @@ class Kokx_Irc_Client
         $this->_connect();
 
         $this->_listen();
+    }
+
+    /**
+     * Send a message to the server
+     *
+     * @param string $message
+     * @param string $target
+     * @param string $type
+     *
+     * @return void
+     */
+    public function send($message, $target, $type = self::TYPE_PRIVMSG)
+    {
+        switch ($type) {
+            case self::TYPE_CTCP:
+                $message = chr(0) . $message . chr(0);
+            case self::TYPE_PRIVMSG:
+                $message = 'PRIVMSG ' . $target . ' :' . $message;
+                break;
+            case self::TYPE_NOTICE:
+                $message = 'NOTICE ' . $target . ' :' . $message;
+                break;
+        }
+
+        $this->sendRaw($message);
     }
 
     /**
