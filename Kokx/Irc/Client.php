@@ -23,9 +23,10 @@ class Kokx_Irc_Client
     /**
      * Message types
      */
-    const TYPE_PRIVMSG = 'privmsg';
-    const TYPE_NOTICE  = 'notice';
-    const TYPE_CTCP    = 'ctcp';
+    const TYPE_PRIVMSG    = 'privmsg';
+    const TYPE_NOTICE     = 'notice';
+    const TYPE_CTCP       = 'ctcp';
+    const TYPE_CTCP_REPLY = 'ctcp_reply';
 
 
     /**
@@ -141,16 +142,31 @@ class Kokx_Irc_Client
     {
         switch ($type) {
             case self::TYPE_CTCP:
-                $message = chr(0) . $message . chr(0);
+                $message = chr(1) . $message . chr(1);
             case self::TYPE_PRIVMSG:
                 $message = 'PRIVMSG ' . $target . ' :' . $message;
                 break;
+            case self::TYPE_CTCP_REPLY:
+                $message = chr(1) . $message . chr(1);
             case self::TYPE_NOTICE:
                 $message = 'NOTICE ' . $target . ' :' . $message;
                 break;
         }
 
         $this->sendRaw($message);
+    }
+
+    /**
+     * Send a CTCP action
+     *
+     * @param string $message
+     * @param string $target
+     *
+     * @return void
+     */
+    public function action($message, $target)
+    {
+        $this->send('ACTION ' . $message, $target, self::TYPE_CTCP);
     }
 
     /**
@@ -164,7 +180,7 @@ class Kokx_Irc_Client
     {
         $this->_connect();
 
-        socket_write($this->_socket, $message . "\n", strlen($message) + 1);
+        socket_write($this->_socket, $message . "\r\n", strlen($message) + 2);
     }
 
     /**
@@ -200,10 +216,14 @@ class Kokx_Irc_Client
             if (!empty($data)) {
                 $lines = explode("\n", $data);
 
+                // loop through all the commands
                 foreach ($lines as $line) {
                     $line = trim($line);
                     if (!empty($line)) {
-                        $this->_processEvent($this->_createEvent($line));
+                        $event = $this->_createEvent($line);
+                        if (false !== $event) {
+                            $this->_processEvent($event);
+                        }
                     }
                 }
             }
@@ -226,7 +246,14 @@ class Kokx_Irc_Client
                 // send a pong back
                 $this->sendRaw('PONG :' . $event['message']);
                 break;
-            // TODO: implement other events
+            case 'ctcp_version':
+                if (isset($this->_config['version'])) {
+                    $version = $this->_config['version'];
+                } else {
+                    $version = 'Kokx_Irc_Client';
+                }
+                $this->send('VERSION ' . $version, $event['nick'], self::TYPE_CTCP_REPLY);
+                break;
         }
     }
 
@@ -237,22 +264,54 @@ class Kokx_Irc_Client
      */
     protected function _createEvent($line)
     {
-        $regex   = "^(?::(?<hostspec>((?<nick>[^!]+)(?:!))?(?<host>[^ ]+)) )?(?<command>[A-Z]*) (?<target>[^ ]* )?:(?<message>.*)$";
+        $regex   = "^(?::(?<hostspec>((?<nick>[^!]+)(?:!))?(?<host>[^ ]+)) )"
+                 . "?(?<command>[A-Z0-9]*) "
+                 . "(?:(?<target>[^: ][^ ]*))"
+                 . "?(?<params>( [^: ][^ ]*){0,12})"
+                 . "(?: :(?<message>.*))?$";
         $matches = array();
 
-        preg_match('/' . $regex . '/i', $line, $matches);
+        // check if it is a correct command, otherwise we just ignore it silently
+        if (!preg_match('/' . $regex . '/i', $line, $matches)) {
+            return false;
+        }
+        if (!isset($matches['message'])) {
+            $matches['message'] = '';
+        }
 
-        $params = array(
-            'line'     => $line,
-            'hostspec' => $matches['hostspec'],
-            'nick'     => $matches['nick'],
-            'host'     => $matches['host'],
-            'command'  => $matches['command'],
-            'target'   => $matches['target'],
-            'message'  => $matches['message']
-        );
-
-        return new Kokx_Event($this, strtolower($matches['command']), $params);
+        // check if it is a CTCP message
+        if (!empty($matches['message'])
+            && ($matches['message'][0] == chr(1))
+            && ($matches['message'][strlen($matches['message']) - 1] == chr(1))
+        ) {
+            // CTCP message
+            $ctcpMatches = array();
+            preg_match('/^\001(?<command>[a-zA-Z]*)(?: ?(?<message>.*))?\001$/i', $matches['message'], $ctcpMatches);
+            $params = array(
+                'line'         => $line,
+                'hostspec'     => $matches['hostspec'],
+                'nick'         => $matches['nick'],
+                'host'         => $matches['host'],
+                'command'      => 'CTCP',
+                'ctcp_command' => $ctcpMatches['command'],
+                'target'       => $matches['target'],
+                'params'       => explode(' ', trim($matches['params'])),
+                'message'      => $ctcpMatches['message']
+            );
+            return new Kokx_Event($this, 'ctcp_' . strtolower($ctcpMatches['command']), $params);
+        } else {
+            $params = array(
+                'line'     => $line,
+                'hostspec' => $matches['hostspec'],
+                'nick'     => $matches['nick'],
+                'host'     => $matches['host'],
+                'command'  => $matches['command'],
+                'target'   => $matches['target'],
+                'params'   => explode(' ', trim($matches['params'])),
+                'message'  => $matches['message']
+            );
+            return new Kokx_Event($this, strtolower($params['command']), $params);
+        }
     }
 
     /**
