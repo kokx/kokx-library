@@ -185,7 +185,7 @@ class Kokx_Irc_Client
             $this->_sendUser();
         }
     }
-    
+
     /**
      * Listen
      *
@@ -194,13 +194,65 @@ class Kokx_Irc_Client
     protected function _listen()
     {
         while (true) {
-            $data = socket_read($this->_socket, 10240);
+            $lines = array();
+            $data  = socket_read($this->_socket, 10240);
+
             if (!empty($data)) {
-                echo $data . "\n";
+                $lines = explode("\n", $data);
+
+                foreach ($lines as $line) {
+                    $line = trim($line);
+                    if (!empty($line)) {
+                        $this->_processEvent($this->_createEvent($line));
+                    }
+                }
             }
 
-            usleep(1000);
+            usleep(100);
         }
+    }
+
+    /**
+     * Process an event
+     *
+     * @param Kokx_Event $event
+     *
+     * @return void
+     */
+    protected function _processEvent(Kokx_Event $event)
+    {
+        switch ($event->getName()) {
+            case 'ping':
+                // send a pong back
+                $this->sendRaw('PONG :' . $event['message']);
+                break;
+            // TODO: implement other events
+        }
+    }
+
+    /**
+     * Create an event from a data line
+     *
+     * @param string $data
+     */
+    protected function _createEvent($line)
+    {
+        $regex   = "^(?::(?<hostspec>((?<nick>[^!]+)(?:!))?(?<host>[^ ]+)) )?(?<command>[A-Z]*) (?<target>[^ ]* )?:(?<message>.*)$";
+        $matches = array();
+
+        preg_match('/' . $regex . '/i', $line, $matches);
+
+        $params = array(
+            'line'     => $line,
+            'hostspec' => $matches['hostspec'],
+            'nick'     => $matches['nick'],
+            'host'     => $matches['host'],
+            'command'  => $matches['command'],
+            'target'   => $matches['target'],
+            'message'  => $matches['message']
+        );
+
+        return new Kokx_Event($this, strtolower($matches['command']), $params);
     }
 
     /**
