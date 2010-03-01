@@ -78,6 +78,13 @@ class Kokx_Irc_Client
      */
     protected $_realname;
 
+    /**
+     * Event dispatcher
+     *
+     * @var Kokx_Event_Dispatcher
+     */
+    protected $_dispatcher;
+
 
     /**
      * Constructor
@@ -115,6 +122,34 @@ class Kokx_Irc_Client
         $this->_port    = $config['port'];
 
         $this->_config = $config;
+    }
+
+    /**
+     * Set the event dispatcher
+     *
+     * @param Kokx_Event_Dispatcher $dispatcher
+     *
+     * @return Kokx_Irc_Client
+     */
+    public function setDispatcher(Kokx_Event_Dispatcher $dispatcher)
+    {
+        $this->_dispatcher = $dispatcher;
+
+        return $this;
+    }
+
+    /**
+     * Get the event dispatcher
+     *
+     * @return Kokx_Event_Dispatcher
+     */
+    public function getDispatcher()
+    {
+        if (null === $this->_dispatcher) {
+            $this->_dispatcher = new Kokx_Event_Dispatcher();
+        }
+
+        return $this->_dispatcher;
     }
 
     /**
