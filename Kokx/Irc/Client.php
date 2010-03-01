@@ -228,7 +228,7 @@ class Kokx_Irc_Client
                 }
             }
 
-            usleep(100);
+            usleep(2500);
         }
     }
 
@@ -265,9 +265,9 @@ class Kokx_Irc_Client
     protected function _createEvent($line)
     {
         $regex   = "^(?::(?<hostspec>((?<nick>[^!]+)(?:!))?(?<host>[^ ]+)) )"
-                 . "?(?<command>[A-Z0-9]*) "
-                 . "(?:(?<target>[^: ][^ ]*))"
-                 . "?(?<params>( [^: ][^ ]*){0,12})"
+                 . "?(?<command>[A-Z0-9]*)[ ]*"
+                 . "(?:(?<target>[^: ][^ ]*))?"
+                 . "(?<params>( [^: ][^ ]*){0,12})"
                  . "(?: :(?<message>.*))?$";
         $matches = array();
 
