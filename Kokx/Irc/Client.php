@@ -289,6 +289,9 @@ class Kokx_Irc_Client
                 }
                 $this->send('VERSION ' . $version, $event['nick'], self::TYPE_CTCP_REPLY);
                 break;
+            default:
+                // for all other events, we use the dispatcher
+                $this->getDispatcher()->trigger($event);
         }
     }
 
