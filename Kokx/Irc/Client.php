@@ -292,6 +292,7 @@ class Kokx_Irc_Client
             default:
                 // for all other events, we use the dispatcher
                 $this->getDispatcher()->trigger($event);
+                break;
         }
     }
 
