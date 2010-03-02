@@ -205,6 +205,38 @@ class Kokx_Irc_Client
     }
 
     /**
+     * Join one or more channels
+     *
+     * @param array|string $channel
+     *
+     * @return void
+     */
+    public function join($channel)
+    {
+        if (is_array($channel)) {
+            array_map(array($this, 'join'), $channel);
+        } else {
+            $this->sendRaw('JOIN ' . $channel);
+        }
+    }
+
+    /**
+     * Part one or more channels
+     *
+     * @param array|string $channel
+     *
+     * @return void
+     */
+    public function part($channel)
+    {
+        if (is_array($channel)) {
+            array_map(array($this, 'part'), $channel);
+        } else {
+            $this->sendRaw('PART ' . $channel);
+        }
+    }
+
+    /**
      * Send a raw message to the server
      *
      * @param string $message
