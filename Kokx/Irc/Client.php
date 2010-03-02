@@ -295,6 +295,9 @@ class Kokx_Irc_Client
                 }
             }
 
+            // unset some variables to make sure we don't have a memory leak
+            unset($lines, $line, $data, $event);
+
             usleep(2500);
         }
     }
