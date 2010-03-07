@@ -295,10 +295,13 @@ class Kokx_Irc_Client
                 }
             }
 
+            // trigger a timer event
+            $this->_processEvent(new Kokx_Event($this, 'timer'));
+
             // unset some variables to make sure we don't have a memory leak
             unset($lines, $line, $data, $event);
 
-            usleep(2500);
+            usleep(10000);
         }
     }
 

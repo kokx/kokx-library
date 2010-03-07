@@ -64,14 +64,11 @@ class Kokx_Irc_Bot
             }
 
             foreach ($config['plugins'] as $plugin) {
-                $this->addPlugin($config['plugins']);
+                $this->addPlugin($plugin);
             }
         }
 
         $this->_config = $config;
-
-        // initialize plugins
-        $this->_init();
     }
 
     /**
