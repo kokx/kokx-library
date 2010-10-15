@@ -181,9 +181,11 @@ class Kokx_Irc_Bot_Plugin_Achievements implements Kokx_Irc_Bot_Plugin_PluginInte
             } else {
                 $this->_client->send($matches['nick'] . ' fails!', $event['target']);
             }
-        } else if (preg_match('/!add (?<nick>' . self::NICK_REGEX . ') (?<desc>.*)/i', $event['message'], $matches)) {
+        } else if (preg_match('/^!add (?<nick>' . self::NICK_REGEX . ') (?<desc>.{10,})/i', $event['message'], $matches)) {
+            // WARNING: this still has a privilege escalation
+
             // first check if this nick is a user
-            if (null !== ($user = $this->_getUserId($matches['nick']))) {
+            if ($this->_isAuthed($matches['nick']) && (null !== ($user = $this->_getUserId($matches['nick'])))) {
                 // the user is checked, now add its new achievement
                 $this->_db->insert('achievements', array(
                     'user_id'     => $user,
@@ -194,6 +196,23 @@ class Kokx_Irc_Bot_Plugin_Achievements implements Kokx_Irc_Bot_Plugin_PluginInte
             } else {
                 $this->_client->send('I dunno who the fuck ' . $matches['nick'] . ' is.', $event['target']);
             }
+        } else if (preg_match('/!list (?<nick>' . self:: NICK_REGEX . ')/i', $event['message'], $matches)) {
+            // show all the achievements of a user
+            if (isset($matches['nick']) && $this->_isAuthed($matches['nick']) && (null !== ($user = $this->_getUserId($matches['nick'])))) {
+                $this->_client->send('The achievements of ' . $matches['nick'] . ':', $event['target']);
+
+                foreach ($this->_getAchievements($user) as $achievement) {
+                    $this->_client->send($achievement['id'] . ': '
+                                       . $achievement['achievement']
+                                       . ' ['
+                                       . ($achievement['achieved'] == 'true' ? 'achieved' : 'in progress')
+                                       . ']', $event['target']);
+                }
+            } else {
+                $this->_client->send('I dunno who the fuck ' . $matches['nick'] . ' is.', $event['target']);
+            }
+        } else if (preg_match('/^!add (?<nick>' . self::NICK_REGEX . ') (?<id>[0-9]+)/i', $event['message'], $matches)) {
+            // WARNING: this still has a privilege escalation
         }
     }
 
@@ -229,6 +248,24 @@ class Kokx_Irc_Bot_Plugin_Achievements implements Kokx_Irc_Bot_Plugin_PluginInte
     protected function _isAuthed($nick)
     {
         return isset($this->_confirmed[strtolower($nick)]) && $this->_confirmed[strtolower($nick)];
+    }
+
+    /**
+     * Get the achievements of a user
+     *
+     * @param int $user
+     *
+     * @return int
+     */
+    protected function _getAchievements($user)
+    {
+        $stmt = $this->_db->prepare($this->_db->select()->from('achievements')->where('user_id=:user'));
+
+        $stmt->bindParam('user', $user, Zend_Db::PARAM_INT);
+
+        $stmt->execute();
+
+        return $stmt->fetchAll(Zend_Db::FETCH_ASSOC);
     }
 
     /**
