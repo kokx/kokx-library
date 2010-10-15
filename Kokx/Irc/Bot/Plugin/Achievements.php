@@ -22,6 +22,8 @@
 class Kokx_Irc_Bot_Plugin_Achievements implements Kokx_Irc_Bot_Plugin_PluginInterface
 {
 
+    const NICK_REGEX = '[a-zA-Z][a-zA-Z0-9{}\[\]\\`^-]*';
+
     /**
      * Config
      *
@@ -43,16 +45,26 @@ class Kokx_Irc_Bot_Plugin_Achievements implements Kokx_Irc_Bot_Plugin_PluginInte
      */
     protected $_client;
 
+    /**
+     * Database adapter
+     *
+     * @var Zend_Db_Adapter_Abstract
+     */
+    protected $_db;
+
 
     /**
      * Constructor
      *
+     * @param Zend_Db_Adapter_Abstract $db
      * @param string $config
      *
      * @return void
      */
-    public function __construct(array $config = array())
+    public function __construct(Zend_Db_Adapter_Abstract $db, array $config = array())
     {
+        $this->_db = $db;
+
         $this->_config = $config;
 
         if (!isset($this->_config['NickServ'])) {
@@ -80,11 +92,13 @@ class Kokx_Irc_Bot_Plugin_Achievements implements Kokx_Irc_Bot_Plugin_PluginInte
     public function register(Kokx_Event_Dispatcher $dispatcher)
     {
         $dispatcher->subscribe('privmsg', array($this, 'privmsg'));
+        $dispatcher->subscribe('notice', array($this, 'notice'));
 
         $dispatcher->subscribe('part', array($this, 'part'));
         $dispatcher->subscribe('quit', array($this, 'part'));
 
         $dispatcher->subscribe('join', array($this, 'join'));
+        // this event gives the names of the people currently in this channel
         $dispatcher->subscribe('353', array($this, 'names'));
     }
 
@@ -151,15 +165,50 @@ class Kokx_Irc_Bot_Plugin_Achievements implements Kokx_Irc_Bot_Plugin_PluginInte
     {
         $this->_client = $event->getSubject();
 
+        $matches = array();
+
+        if (preg_match('/^!check (?<nick>' . self::NICK_REGEX . ')/i', $event['message'], $matches)) {
+            // check if a certain nick is confirmed
+            if ($this->_isAuthed($matches['nick'])) {
+                $this->_client->send($matches['nick'] . ' is authed!', $event['target']);
+            } else {
+                $this->_client->send($matches['nick'] . ' fails!', $event['target']);
+            }
+        }
+    }
+
+    /**
+     * NOTICE event
+     *
+     * @param Kokx_Event $event
+     *
+     * @return void
+     */
+    public function notice(Kokx_Event $event)
+    {
         if ($event['nick'] == $this->_config['NickServ']) {
+            // yay, nickserv is contacting us
             $matches = array();
-            // we were busy confirming a nick
-            if (preg_match('/Nickname: (?<nick>[a-zA-Z]([a-zA-Z0-9{}\[\]\\`^-])) << ONLINE >>/i', $event['message'], $matches)) {
+
+            // check if we were busy confirming a nick
+            if (preg_match('/Nickname: (?<nick>' . self::NICK_REGEX . ') << ONLINE >>/i', $event['message'], $matches)) {
                 if (isset($this->_confirmed[$matches['nick']])) {
                     $this->_confirmed[$matches['nick']] = true;
                 }
             }
         }
+    }
+
+    /**
+     * Check if a user is authed
+     *
+     * @param string $nick
+     *
+     * @return bool
+     */
+    protected function _isAuthed($nick)
+    {
+        return isset($this->_confirmed[$nick]) && $this->_confirmed[$nick];
     }
 
     /**
