@@ -51,6 +51,9 @@ class Kokx_Irc_Bot_Plugin_NickServ implements Kokx_Irc_Bot_Plugin_PluginInterfac
         if (!isset($this->_config['nick'])) {
             $this->_config['nick'] = 'NickServ';
         }
+        if (!isset($this->_config['csnick'])) {
+            $this->_config['csnick'] = 'ChanServ';
+        }
         if (!isset($this->_config['password'])) {
             $this->_config['password'] = '';
         }
@@ -88,5 +91,6 @@ class Kokx_Irc_Bot_Plugin_NickServ implements Kokx_Irc_Bot_Plugin_PluginInterfac
     public function motd(Kokx_Event $event)
     {
         $event->getSubject()->send('IDENTIFY ' . $this->_config['password'], $this->_config['nick']);
+        $event->getSubject()->send('op all', $this->_config['csnick']);
     }
 }
