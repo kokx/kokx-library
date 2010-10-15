@@ -211,8 +211,34 @@ class Kokx_Irc_Bot_Plugin_Achievements implements Kokx_Irc_Bot_Plugin_PluginInte
             } else {
                 $this->_client->send('I dunno who the fuck ' . $matches['nick'] . ' is.', $event['target']);
             }
-        } else if (preg_match('/^!add (?<nick>' . self::NICK_REGEX . ') (?<id>[0-9]+)/i', $event['message'], $matches)) {
+        } else if (preg_match('/^!achieved (?<nick>' . self::NICK_REGEX . ') (?<id>[0-9]+)/i', $event['message'], $matches)) {
             // WARNING: this still has a privilege escalation
+            //
+            // first check if this nick is a user
+            if (($matches['nick'] != $event['nick'])
+            && $this->_isAuthed($matches['nick'])
+            && (null !== ($user = $this->_getUserId($matches['nick'])))) {
+                // the user is checked, now check if he can unlock the achievement
+
+                $stmt = $this->_db->prepare($this->_db->select()->from('achievements', 'user_id')->where('id=:id'));
+
+                $stmt->bindParam('id', $matches['id'], Zend_Db::PARAM_INT);
+
+                $stmt->execute();
+
+                // check the achievement
+                if (($achievement = $stmt->fetch(Zend_Db::FETCH_ASSOC)) && ($achievement['user_id'] == $user)) {
+                    $this->_db->update('achievements', array(
+                        'achieved' => 'true'
+                    ), array('id=?' => $matches['id']));
+
+                    $this->_client->send('ACHIEVEMENT UNLOCKED!!!!!!!!!!!!!!!', $event['target']);
+                } else {
+                    $this->_client->send('Someone should unlock the achievement \'EPIC FAIL\' for ' . $event['nick'] . '!', $event['target']);
+                }
+            } else {
+                $this->_client->send('I dunno who the fuck ' . $matches['nick'] . ' is.', $event['target']);
+            }
         }
     }
 
