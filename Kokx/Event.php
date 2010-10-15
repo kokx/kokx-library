@@ -79,6 +79,16 @@ class Kokx_Event implements ArrayAccess
     }
 
     /**
+     * Get all the event's parameters
+     *
+     * @return array
+     */
+    public function getParameters()
+    {
+        return $this->_parameters;
+    }
+
+    /**
      * Check if the offset exists
      *
      * @param mixed $offset
