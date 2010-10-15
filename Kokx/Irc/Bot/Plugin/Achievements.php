@@ -171,21 +171,22 @@ class Kokx_Irc_Bot_Plugin_Achievements implements Kokx_Irc_Bot_Plugin_PluginInte
             // check if a certain nick is confirmed
             if ($this->_isAuthed($matches['nick'])) {
                 $this->_client->send($matches['nick'] . ' is authed!', $event['target']);
+
+                // and now check if this user is in the DB too
+                if (null !== $this->_getUserId($matches['nick'])) {
+                    $this->_client->send('And of course I know who ' . $matches['nick'] . ' is.', $event['target']);
+                } else {
+                    $this->_client->send('But I don\'t actually know who the fucking fuck ' . $matches['nick'] . ' is.', $event['target']);
+                }
             } else {
                 $this->_client->send($matches['nick'] . ' fails!', $event['target']);
             }
         } else if (preg_match('/!add (?<nick>' . self::NICK_REGEX . ') (?<desc>.*)/i', $event['message'], $matches)) {
             // first check if this nick is a user
-            $stmt = $this->_db->prepare($this->_db->select()->from('users', 'id')->where('name=:nick'));
-
-            $stmt->bindParam('nick', $matches['nick'], Zend_Db::PARAM_STR);
-
-            $stmt->execute();
-
-            if ($user = $stmt->fetch(Zend_Db::FETCH_ASSOC)) {
+            if (null !== ($user = $this->_getUserId($matches['nick']))) {
                 // the user is checked, now add its new achievement
                 $this->_db->insert('achievements', array(
-                    'user_id'     => $user['id'],
+                    'user_id'     => $user,
                     'achievement' => $matches['desc']
                 ));
 
@@ -227,7 +228,31 @@ class Kokx_Irc_Bot_Plugin_Achievements implements Kokx_Irc_Bot_Plugin_PluginInte
      */
     protected function _isAuthed($nick)
     {
-        return isset($this->_confirmed[$nick]) && $this->_confirmed[$nick];
+        return isset($this->_confirmed[strtolower($nick)]) && $this->_confirmed[strtolower($nick)];
+    }
+
+    /**
+     * Get a user's ID
+     *
+     * @param string $nick
+     *
+     * @return int
+     */
+    protected function _getUserId($nick)
+    {
+        $stmt = $this->_db->prepare($this->_db->select()->from('users', 'id')->where('name=:nick'));
+
+        $nick = strtolower($nick);
+
+        $stmt->bindParam('nick', $nick, Zend_Db::PARAM_STR);
+
+        $stmt->execute();
+
+        if ($user = $stmt->fetch(Zend_Db::FETCH_ASSOC)) {
+            return $user['id'];
+        }
+
+        return null;
     }
 
     /**
@@ -239,7 +264,7 @@ class Kokx_Irc_Bot_Plugin_Achievements implements Kokx_Irc_Bot_Plugin_PluginInte
      */
     protected function _confirm($nick)
     {
-        $this->_confirmed[$nick] = false;
+        $this->_confirmed[strtolower($nick)] = false;
 
         // ask confirmation to NickServ
         $this->_client->send('info ' . $nick, $this->_config['NickServ']);
