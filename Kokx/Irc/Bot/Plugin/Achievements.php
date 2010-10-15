@@ -174,6 +174,25 @@ class Kokx_Irc_Bot_Plugin_Achievements implements Kokx_Irc_Bot_Plugin_PluginInte
             } else {
                 $this->_client->send($matches['nick'] . ' fails!', $event['target']);
             }
+        } else if (preg_match('/!add (?<nick>' . self::NICK_REGEX . ') (?<desc>.*)/i', $event['message'], $matches)) {
+            // first check if this nick is a user
+            $stmt = $this->_db->prepare($this->_db->select()->from('users', 'id')->where('name=:nick'));
+
+            $stmt->bindParam('nick', $matches['nick'], Zend_Db::PARAM_STR);
+
+            $stmt->execute();
+
+            if ($user = $stmt->fetch(Zend_Db::FETCH_ASSOC)) {
+                // the user is checked, now add its new achievement
+                $this->_db->insert('achievements', array(
+                    'user_id'     => $user['id'],
+                    'achievement' => $matches['desc']
+                ));
+
+                $this->_client->send('New achievement added!', $event['target']);
+            } else {
+                $this->_client->send('I dunno who the fuck ' . $matches['nick'] . ' is.', $event['target']);
+            }
         }
     }
 
