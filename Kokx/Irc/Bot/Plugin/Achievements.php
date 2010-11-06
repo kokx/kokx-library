@@ -22,7 +22,17 @@
 class Kokx_Irc_Bot_Plugin_Achievements implements Kokx_Irc_Bot_Plugin_PluginInterface
 {
 
-    const NICK_REGEX = '[a-zA-Z][a-zA-Z0-9{}\[\]\\`^-]*';
+    /**
+     * From RFC-2812 2.3.1
+     * BNF form:
+     *
+     * nickname = ( letter / special ) *8( letter / digit / special / "-" )
+     *
+     * Please note that we disobey to the maximum length of the nickname, since
+     * most IRC servers allow longer nicknames in practise.
+     */
+    const NICK_REGEX       = '[a-zA-Z][a-zA-Z0-9{}\[\]\\`^-]*';
+    const MAX_REFRESH_TIME = 60;
 
     /**
      * Config
@@ -37,6 +47,13 @@ class Kokx_Irc_Bot_Plugin_Achievements implements Kokx_Irc_Bot_Plugin_PluginInte
      * @var array
      */
     protected $_confirmed = array();
+
+    /**
+     * Last time we refreshed the confirmed users list
+     *
+     * @var int
+     */
+    protected $_lastRefresh;
 
     /**
      * Client
@@ -152,6 +169,8 @@ class Kokx_Irc_Bot_Plugin_Achievements implements Kokx_Irc_Bot_Plugin_PluginInte
                     $this->_confirm($nick);
             }
         }
+
+        $this->_lastRefresh = time();
     }
 
     /**
@@ -182,23 +201,27 @@ class Kokx_Irc_Bot_Plugin_Achievements implements Kokx_Irc_Bot_Plugin_PluginInte
                 $this->_client->send($matches['nick'] . ' fails!', $event['target']);
             }
         } else if (preg_match('/^!add (?<nick>' . self::NICK_REGEX . ') (?<desc>.{10,})/i', $event['message'], $matches)) {
-            // WARNING: this still has a privilege escalation
+            // validate, then use the method
+            if ($this->_checkUser($event['nick'], $event['target'], true)
+            && $this->_checkUser($matches['nick'], $event['target'], true)) {
 
-            // first check if this nick is a user
-            if ($this->_isAuthed($matches['nick']) && (null !== ($user = $this->_getUserId($matches['nick'])))) {
                 // the user is checked, now add its new achievement
+                $user = $this->_getUserId($matches['nick']);
+
                 $this->_db->insert('achievements', array(
                     'user_id'     => $user,
                     'achievement' => $matches['desc']
                 ));
 
                 $this->_client->send('New achievement added!', $event['target']);
-            } else {
-                $this->_client->send('I dunno who the fuck ' . $matches['nick'] . ' is.', $event['target']);
             }
-        } else if (preg_match('/!list (?<nick>' . self:: NICK_REGEX . ')/i', $event['message'], $matches)) {
+        } else if (preg_match('/!list( (?<nick>' . self:: NICK_REGEX . '))?/i', $event['message'], $matches)) {
+            if (empty($matches['nick'])) {
+                $matches['nick'] = $event['nick'];
+            }
+
             // show all the achievements of a user
-            if (isset($matches['nick']) && $this->_isAuthed($matches['nick']) && (null !== ($user = $this->_getUserId($matches['nick'])))) {
+            if (null !== ($user = $this->_getUserId($matches['nick']))) {
                 $this->_client->send('The achievements of ' . $matches['nick'] . ':', $event['target']);
 
                 foreach ($this->_getAchievements($user) as $achievement) {
@@ -212,13 +235,12 @@ class Kokx_Irc_Bot_Plugin_Achievements implements Kokx_Irc_Bot_Plugin_PluginInte
                 $this->_client->send('I dunno who the fuck ' . $matches['nick'] . ' is.', $event['target']);
             }
         } else if (preg_match('/^!achieved (?<nick>' . self::NICK_REGEX . ') (?<id>[0-9]+)/i', $event['message'], $matches)) {
-            // WARNING: this still has a privilege escalation
-            //
             // first check if this nick is a user
-            if (($matches['nick'] != $event['nick'])
-            && $this->_isAuthed($matches['nick'])
+            if (($matches['nick'] != $event['nick']) && $this->_checkUser($event['nick'], $event['target'], true)
             && (null !== ($user = $this->_getUserId($matches['nick'])))) {
                 // the user is checked, now check if he can unlock the achievement
+
+                $user = $this->_getUserId($matches['nick']);
 
                 $stmt = $this->_db->prepare($this->_db->select()->from('achievements', 'user_id')->where('id=:id'));
 
@@ -236,9 +258,10 @@ class Kokx_Irc_Bot_Plugin_Achievements implements Kokx_Irc_Bot_Plugin_PluginInte
                 } else {
                     $this->_client->send('Someone should unlock the achievement \'EPIC FAIL\' for ' . $event['nick'] . '!', $event['target']);
                 }
-            } else {
-                $this->_client->send('I dunno who the fuck ' . $matches['nick'] . ' is.', $event['target']);
             }
+        } else if (preg_match('/^!refresh/i', $event['message'])) {
+            $this->_refresh();
+            $this->_client->send('Finished refreshing the confirmed users list.', $event['target']);
         }
     }
 
@@ -255,13 +278,47 @@ class Kokx_Irc_Bot_Plugin_Achievements implements Kokx_Irc_Bot_Plugin_PluginInte
             // yay, nickserv is contacting us
             $matches = array();
 
-            // check if we were busy confirming a nick
+            // check if we have confirmed a nick
             if (preg_match('/Nickname: (?<nick>' . self::NICK_REGEX . ') << ONLINE >>/i', $event['message'], $matches)) {
-                if (isset($this->_confirmed[$matches['nick']])) {
-                    $this->_confirmed[$matches['nick']] = true;
+                $nick = strtolower($matches['nick']);
+                if (isset($this->_confirmed[$nick])) {
+                    $this->_confirmed[$nick] = true;
                 }
             }
         }
+    }
+
+    /**
+     * Check a user
+     *
+     * The third parameter, which is optional, defines if this command should
+     * send messages to the target if $nick is not authed.
+     *
+     * @param string $nick
+     * @param string $target
+     * @param bool $sendMessage
+     *
+     * @return bool
+     */
+    protected function _checkUser($nick, $target = '', $sendMessage = false)
+    {
+        if ($this->_isAuthed($nick)) {
+            if (null !== $this->_getUserId($nick)) {
+                return true;
+            }
+
+            if ($sendMessage) {
+                $this->_client->send('I dunno who the fuck ' . $nick . ' is.', $target);
+            }
+
+            return false;
+        }
+
+        if ($sendMessage) {
+            $this->_client->send('I dunno who the fuck ' . $nick . ' is.', $target);
+        }
+
+        return false;
     }
 
     /**
@@ -316,6 +373,28 @@ class Kokx_Irc_Bot_Plugin_Achievements implements Kokx_Irc_Bot_Plugin_PluginInte
         }
 
         return null;
+    }
+
+    /**
+     * Refresh user confirmation
+     *
+     * @return void
+     */
+    protected function _refresh()
+    {
+        // first check if we should try to confirm the user
+        if ($this->_lastRefresh + self::MAX_REFRESH_TIME < time()) {
+            return;
+        }
+
+        foreach ($this->_confirmed as $nick => $confirmed) {
+            if (!$confirmed) {
+                // retry to confirm this user
+                $this->_confirm($nick);
+            }
+        }
+
+        $this->_lastRefresh = time();
     }
 
     /**
