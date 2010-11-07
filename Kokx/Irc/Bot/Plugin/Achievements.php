@@ -63,9 +63,9 @@ class Kokx_Irc_Bot_Plugin_Achievements implements Kokx_Irc_Bot_Plugin_PluginInte
     protected $_client;
 
     /**
-     * Database adapter
+     * Database broker
      *
-     * @var Zend_Db_Adapter_Abstract
+     * @var Kokx_Db_Broker
      */
     protected $_db;
 
@@ -73,12 +73,12 @@ class Kokx_Irc_Bot_Plugin_Achievements implements Kokx_Irc_Bot_Plugin_PluginInte
     /**
      * Constructor
      *
-     * @param Zend_Db_Adapter_Abstract $db
+     * @param Kokx_Db_Broker $db
      * @param string $config
      *
      * @return void
      */
-    public function __construct(Zend_Db_Adapter_Abstract $db, array $config = array())
+    public function __construct(Kokx_Db_Broker $db, array $config = array())
     {
         $this->_db = $db;
 
@@ -208,7 +208,7 @@ class Kokx_Irc_Bot_Plugin_Achievements implements Kokx_Irc_Bot_Plugin_PluginInte
                 // the user is checked, now add its new achievement
                 $user = $this->_getUserId($matches['nick']);
 
-                $this->_db->insert('achievements', array(
+                $this->_db->getAdapter()->insert('achievements', array(
                     'user_id'     => $user,
                     'achievement' => $matches['desc']
                 ));
@@ -242,7 +242,9 @@ class Kokx_Irc_Bot_Plugin_Achievements implements Kokx_Irc_Bot_Plugin_PluginInte
 
                 $user = $this->_getUserId($matches['nick']);
 
-                $stmt = $this->_db->prepare($this->_db->select()->from('achievements', 'user_id')->where('id=:id'));
+                $stmt = $this->_db->getAdapter()->prepare($this->_db->getAdapter()->select()
+                                                                                  ->from('achievements', 'user_id')
+                                                                                  ->where('id=:id'));
 
                 $stmt->bindParam('id', $matches['id'], Zend_Db::PARAM_INT);
 
@@ -250,7 +252,7 @@ class Kokx_Irc_Bot_Plugin_Achievements implements Kokx_Irc_Bot_Plugin_PluginInte
 
                 // check the achievement
                 if (($achievement = $stmt->fetch(Zend_Db::FETCH_ASSOC)) && ($achievement['user_id'] == $user)) {
-                    $this->_db->update('achievements', array(
+                    $this->_db->getAdapter()->update('achievements', array(
                         'achieved' => 'true'
                     ), array('id=?' => $matches['id']));
 
@@ -342,7 +344,8 @@ class Kokx_Irc_Bot_Plugin_Achievements implements Kokx_Irc_Bot_Plugin_PluginInte
      */
     protected function _getAchievements($user)
     {
-        $stmt = $this->_db->prepare($this->_db->select()->from('achievements')->where('user_id=:user'));
+        $stmt = $this->_db->getAdapter()->prepare($this->_db->getAdapter()->select()->from('achievements')
+                                                                                    ->where('user_id=:user'));
 
         $stmt->bindParam('user', $user, Zend_Db::PARAM_INT);
 
@@ -360,7 +363,7 @@ class Kokx_Irc_Bot_Plugin_Achievements implements Kokx_Irc_Bot_Plugin_PluginInte
      */
     protected function _getUserId($nick)
     {
-        $stmt = $this->_db->prepare($this->_db->select()->from('users', 'id')->where('name=:nick'));
+        $stmt = $this->_db->getAdapter()->prepare($this->_db->getAdapter()->select()->from('users', 'id')->where('name=:nick'));
 
         $nick = strtolower($nick);
 
