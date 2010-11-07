@@ -36,19 +36,29 @@ class Kokx_Irc_Bot_Plugin_GitHub implements Kokx_Irc_Bot_Plugin_PluginInterface
      */
     protected $_lastRun;
 
+    /**
+     * Target to send to
+     *
+     * @var string
+     */
+    protected $_target;
+
 
     /**
      * Constructor
      *
      * @param string $inputFile input file where the github commit hook stores its data
+     * @param string $target target to send the github data to
      *
      * @return void
      */
-    public function __construct($inputFile)
+    public function __construct($inputFile, $target)
     {
         $this->_inputFile = $inputFile;
 
         $this->_lastRun = time();
+
+        $this->_target = $target;
     }
 
     /**
@@ -113,7 +123,7 @@ class Kokx_Irc_Bot_Plugin_GitHub implements Kokx_Irc_Bot_Plugin_PluginInterface
                          . substr($data['before'], 0, 12) . '...' . substr($data['after'], 0, 12);
             }
 
-            $client->send($message, '#firal');
+            $client->send($message, $this->_target);
 
             file_put_contents($this->_inputFile, '');
         }
