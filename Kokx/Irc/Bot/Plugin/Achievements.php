@@ -344,8 +344,12 @@ class Kokx_Irc_Bot_Plugin_Achievements implements Kokx_Irc_Bot_Plugin_PluginInte
      */
     protected function _getAchievements($user)
     {
-        $stmt = $this->_db->getAdapter()->prepare($this->_db->getAdapter()->select()->from('achievements')
-                                                                                    ->where('user_id=:user'));
+        $stmt = $this->_db->getAdapter()->prepare($this->_db->getAdapter()->select()
+                                                                          ->from('achievements')
+                                                                          ->where('user_id=:user')
+                                                                          ->order(new Zend_Db_Expr(
+                                                                              "FIELD(achieved, 'true', 'false')"
+                                                                          )));
 
         $stmt->bindParam('user', $user, Zend_Db::PARAM_INT);
 
