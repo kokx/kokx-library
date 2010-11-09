@@ -78,7 +78,7 @@ class Kokx_Db_Broker
     {
         try {
             $this->_adapter->query('SELECT 1');
-        } catch (PDOException $e) {
+        } catch (Exception $e) {
             // there is an error, so we reconnect
             $this->_adapter = null;
 
